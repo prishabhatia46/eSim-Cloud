@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from django.conf import settings
 from .parse import extract_data_from_ngspice_output
+from .error_simplifier import simplify_error
 logger = logging.getLogger(__name__)
 
 
@@ -62,12 +63,12 @@ def ExecNetlist(filepath, file_id):
                 """
                 tmp = stderr.decode("utf-8")
                 foo = '{}'.format(tmp)
-                output = {'fail': foo}
+                output = {'fail': simplify_error(foo)}
         else:
             out = stdout.decode("utf-8")
             err = stderr.decode("utf-8")
             foo = '{}'.format(out+err)
-            output = {'fail': foo}
+            output = {'fail': simplify_error(foo)}
         logger.info('output from ngspice_helper.py')
         logger.info(stderr)
         # logger.info(output)

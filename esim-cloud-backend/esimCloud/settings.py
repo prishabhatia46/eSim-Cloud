@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'arduinoAPI',
     'workflowAPI',
     'ltiAPI',
+    'chatbotAPI',
 ]
 
 MIDDLEWARE = [
@@ -142,11 +143,16 @@ SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.environ.get(
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.environ.get(
     "SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET", "")
 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
 GOOGLE_OAUTH_REDIRECT_URI = os.environ.get(
     "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost/api/auth/google-callback")
 
 POST_ACTIVATE_REDIRECT_URL = os.environ.get(
     "POST_ACTIVATE_REDIRECT_URL", "http://localhost/")
+
+# AI Assistant API Key
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 DJOSER = {
     'SEND_ACTIVATION_EMAIL': True,
@@ -191,6 +197,12 @@ USE_TZ = True
 
 # Allow CORS for Public API
 CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1'
+]
 
 # Static files for django admin and DRF
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')

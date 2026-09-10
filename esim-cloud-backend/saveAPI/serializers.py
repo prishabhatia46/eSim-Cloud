@@ -53,7 +53,7 @@ class StateSaveSerializer(serializers.ModelSerializer):
                   'owner', 'shared', 'base64_image', 'create_time', 'version',
                   'branch', 'is_arduino', 'esim_libraries', 'project_id',
                   'project_version', 'project_branch', 'is_reported',
-                  'id', 'lti_id', 'is_submission')
+                  'id', 'lti_id', 'is_submission', 'pinned')
 
     def get_lti_id(self, obj):
         save_id = obj.save_id
@@ -66,6 +66,11 @@ class StateSaveSerializer(serializers.ModelSerializer):
             return arduinoLTIs[0].id
         else:
             return None
+
+
+class PublicStateSaveSerializer(StateSaveSerializer):
+    class Meta(StateSaveSerializer.Meta):
+        fields = tuple(x for x in StateSaveSerializer.Meta.fields if x != 'owner')
 
 
 class SaveListSerializer(serializers.ModelSerializer):
@@ -87,7 +92,7 @@ class SaveListSerializer(serializers.ModelSerializer):
                   'shared', 'base64_image', 'create_time', 'version',
                   'branch', 'esim_libraries', 'project_id', 'project_version',
                   'project_branch', 'is_reported', 'id', 'lti_id',
-                  'is_submission')
+                  'is_submission', 'pinned')
 
     def get_lti_id(self, obj):
         save_id = obj.save_id

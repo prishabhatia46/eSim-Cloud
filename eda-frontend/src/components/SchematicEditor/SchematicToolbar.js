@@ -9,7 +9,12 @@ import {
   Snackbar,
   Select,
   FormControl,
-  InputLabel
+  InputLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField
 } from '@material-ui/core'
 import AddBoxOutlinedIcon from '@material-ui/icons/AddBoxOutlined'
 import PlayCircleOutlineIcon from '@material-ui/icons/PlayCircleOutline'
@@ -30,6 +35,7 @@ import SaveOutlinedIcon from '@material-ui/icons/SaveOutlined'
 import OpenInBrowserIcon from '@material-ui/icons/OpenInBrowser'
 import ClearAllIcon from '@material-ui/icons/ClearAll'
 import CreateNewFolderOutlinedIcon from '@material-ui/icons/CreateNewFolderOutlined'
+import LayersIcon from '@material-ui/icons/Layers'
 import ImageOutlinedIcon from '@material-ui/icons/ImageOutlined'
 import SystemUpdateAltOutlinedIcon from '@material-ui/icons/SystemUpdateAltOutlined'
 import LibraryAddRoundedIcon from '@material-ui/icons/LibraryAddRounded'
@@ -41,6 +47,8 @@ import { Link as RouterLink } from 'react-router-dom'
 import queryString from 'query-string'
 import { RotateLeft } from '@material-ui/icons'
 import AddPhotoAlternateIcon from '@material-ui/icons/AddPhotoAlternate'
+import ShareIcon from '@material-ui/icons/Share'
+import Alert from '@material-ui/lab/Alert'
 import { fetchRole } from '../../redux/actions/authActions'
 
 import {
@@ -63,7 +71,10 @@ import {
   Redo,
   Save,
   ClearGrid,
-  RotateACW
+  RotateACW,
+  CopyComponents,
+  PasteComponents,
+  SelectAll
 } from './Helper/ToolbarTools'
 import {
   toggleSimulate,
@@ -144,7 +155,8 @@ export default function SchematicToolbar ({
   mobileClose,
   gridRef,
   ltiSimResult,
-  setLtiSimResult
+  setLtiSimResult,
+  onNewFromTemplate
 }) {
   const classes = useStyles()
   const netfile = useSelector((state) => state.netlistReducer)
@@ -189,9 +201,8 @@ export default function SchematicToolbar ({
           setActiveSimResult(res.data[res.data.length - 1].id)
         })
         .catch((err) => {
-          console.log(err)
+          console.error(err)
         })
-      console.log('SIM RESULTS FOUND')
       setLtiSimResult(false)
     }
     // eslint-disable-next-line
@@ -211,6 +222,50 @@ export default function SchematicToolbar ({
       return
     }
     setshortCircuit(false)
+  }
+
+  const [shareDialogOpen, setShareDialogOpen] = React.useState(false)
+
+  const hashSplit = window.location.hash.split('?')
+  let urlParams = new URLSearchParams('')
+  if (hashSplit.length > 1) {
+    urlParams = new URLSearchParams(hashSplit[1])
+  }
+  const currentSaveId = urlParams.get('id')
+  const currentVersion = urlParams.get('version') || '1'
+  const currentBranch = urlParams.get('branch') || 'main'
+
+  const shareUrl = `${window.location.origin}/eda/#/view/${currentSaveId}/${currentVersion}/${currentBranch}`
+
+  const handleShareClick = () => {
+    setShareDialogOpen(true)
+  }
+
+  const handleShareClose = () => {
+    setShareDialogOpen(false)
+  }
+
+  const handleCopyLink = () => {
+    try {
+      navigator.clipboard.writeText(shareUrl)
+      setMessage('Link copied!')
+      setSnacOpen(true)
+    } catch (err) {
+      setMessage('Failed to copy link.')
+      setSnacOpen(true)
+    }
+  }
+
+  const handleMakePublic = () => {
+    api.patch(`save/share/${currentSaveId}/${currentVersion}/${currentBranch}/`, { shared: true })
+      .then(() => {
+        setMessage('Circuit is now public!')
+        setSnacOpen(true)
+      })
+      .catch((err) => {
+        setMessage('Login required to share circuits.')
+        setSnacOpen(true)
+      })
   }
 
   const handleSave = (version, newSave, save_id) => {
@@ -307,14 +362,13 @@ export default function SchematicToolbar ({
             setScored(res.data.scored)
           }
         })
-        .catch((err) => console.log(err))
+        .catch((err) => console.error(err))
     }
     // eslint-disable-next-line
   }, [ltiId]);
 
   useEffect(() => {
     if (consumerKey) {
-      console.log(schSave)
       api
         .get(`lti/exist/${id}`)
         .then((res) => {
@@ -324,7 +378,7 @@ export default function SchematicToolbar ({
             setScored(res.data.scored)
           }
         })
-        .catch((err) => console.log(err))
+        .catch((err) => console.error(err))
     }
     // eslint-disable-next-line
   }, [consumerKey]);
@@ -340,18 +394,16 @@ export default function SchematicToolbar ({
         },
         student_simulation: activeSimResult
       }
-      console.log(body)
       api
         .post('lti/submit/', body)
         .then((res) => {
-          console.log(res.data)
           setSubmissionDetails(res.data)
           setResults(true)
           setSubmit(true)
           setSubmitMessage(res.data.message)
         })
         .catch((err) => {
-          console.log(err)
+          console.error(err)
           setSubmit(true)
           setSubmitMessage(
             'There was an error while submitting. Please try again later!'
@@ -429,7 +481,13 @@ export default function SchematicToolbar ({
 
   // Image Export of Schematic Diagram
   async function exportImage (type) {
-    const svg = document.querySelector('#divGrid > svg').cloneNode(true)
+    // Fix A: null guard — if the mxGraph container SVG or gridRef is not ready, bail out gracefully
+    const rawSvg = document.querySelector('#divGrid > svg')
+    if (!rawSvg || !gridRef || !gridRef.current) {
+      console.warn('[exportImage] Grid container or SVG not available — skipping thumbnail export.')
+      return null
+    }
+    const svg = rawSvg.cloneNode(true)
     svg.removeAttribute('style')
     svg.setAttribute('width', gridRef.current.scrollWidth)
     svg.setAttribute('height', gridRef.current.scrollHeight)
@@ -439,15 +497,24 @@ export default function SchematicToolbar ({
     canvas.style.width = canvas.width + 'px'
     canvas.style.height = canvas.height + 'px'
     const images = svg.getElementsByTagName('image')
-    for (const image of images) {
-      const data = await fetch(image.getAttribute('xlink:href')).then((v) => {
-        return v.text()
-      })
-      image.removeAttribute('xlink:href')
-      image.setAttribute(
-        'href',
-        'data:image/svg+xml;base64,' + window.btoa(data)
-      )
+    try {
+      for (const image of images) {
+        const href = image.getAttribute('xlink:href') || image.getAttribute('href')
+        if (!href) continue
+        if (href.startsWith('data:')) {
+          image.removeAttribute('xlink:href')
+          image.setAttribute('href', href)
+          continue
+        }
+        const data = await fetch(href).then((v) => v.text())
+        image.removeAttribute('xlink:href')
+        image.setAttribute(
+          'href',
+          'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(data)))
+        )
+      }
+    } catch (err) {
+      console.warn('[exportImage] Failed to inline images:', err)
     }
     const ctx = canvas.getContext('2d')
     ctx.mozImageSmoothingEnabled = true
@@ -462,28 +529,34 @@ export default function SchematicToolbar ({
         resolve('<?xml version="1.0" encoding="UTF-8"?>' + svgdata)
         return
       }
-      const v = Canvg.fromString(ctx, svg.outerHTML)
-      v.render().then(() => {
-        let image = ''
-        if (type === 'JPG') {
-          const imgdata = ctx.getImageData(0, 0, canvas.width, canvas.height)
-          for (let i = 0; i < imgdata.data.length; i += 4) {
-            if (imgdata.data[i + 3] === 0) {
-              imgdata.data[i] = 255
-              imgdata.data[i + 1] = 255
-              imgdata.data[i + 2] = 255
-              imgdata.data[i + 3] = 255
+      try {
+        const v = Canvg.fromString(ctx, svg.outerHTML)
+        v.render().then(() => {
+          let image = ''
+          if (type === 'JPG') {
+            const imgdata = ctx.getImageData(0, 0, canvas.width, canvas.height)
+            for (let i = 0; i < imgdata.data.length; i += 4) {
+              if (imgdata.data[i + 3] === 0) {
+                imgdata.data[i] = 255
+                imgdata.data[i + 1] = 255
+                imgdata.data[i + 2] = 255
+                imgdata.data[i + 3] = 255
+              }
             }
-          }
-          ctx.putImageData(imgdata, 0, 0)
-          image = canvas.toDataURL('image/jpeg', 1.0)
-        } else {
-          if (type === 'PNG') {
+            ctx.putImageData(imgdata, 0, 0)
+            image = canvas.toDataURL('image/jpeg', 1.0)
+          } else if (type === 'PNG') {
             image = canvas.toDataURL('image/png')
           }
-        }
-        resolve(image)
-      })
+          resolve(image)
+        }).catch((err) => {
+          console.warn('[exportImage] Canvg render error:', err)
+          resolve(canvas.toDataURL('image/png'))
+        })
+      } catch (err) {
+        console.warn('[exportImage] Canvg fromString error:', err)
+        resolve(canvas.toDataURL('image/png'))
+      }
     })
   }
 
@@ -553,13 +626,26 @@ export default function SchematicToolbar ({
       dispatch(setSchXmlData(xml))
       const title = schSave.title
       const description = schSave.description
-      exportImage('PNG').then((res) => {
-        dispatch(
-          saveSchematic(title, description, xml, res, false, null, handleSave)
-        )
-      })
-      setMessage('Saved Successfully')
-      handleSnacClick()
+      // Fix B: wrap exportImage in try-catch so a thumbnail failure never blocks the save
+      // Fix C: no backdrop/dialog was opened before, so no overlay to clean up here
+      exportImage('PNG')
+        .then((res) => {
+          // res may be null if the grid wasn't ready — that is fine, save proceeds
+          dispatch(
+            saveSchematic(title, description, xml, res, false, null, handleSave)
+          )
+          setMessage('Saved Successfully')
+          handleSnacClick()
+        })
+        .catch((err) => {
+          console.warn('[handleSchSave] Thumbnail export failed, saving without image:', err)
+          // Fix B: save the circuit data even when thumbnail export throws
+          dispatch(
+            saveSchematic(title, description, xml, null, false, null, handleSave)
+          )
+          setMessage('Saved (thumbnail skipped)')
+          handleSnacClick()
+        })
     }
   }
 
@@ -700,12 +786,29 @@ export default function SchematicToolbar ({
           handleLocalSchSave()
         }
       }
+      // Copy - Ctrl + C
+      if (event.ctrlKey && event.keyCode === 67) {
+        console.log('[shortcut] Ctrl+C detected')
+        event.preventDefault()
+        CopyComponents()
+      }
+      // Paste - Ctrl + V
+      if (event.ctrlKey && event.keyCode === 86) {
+        console.log('[shortcut] Ctrl+V detected')
+        event.preventDefault()
+        PasteComponents()
+      }
+      // Select All - Ctrl + A
+      if (event.ctrlKey && event.keyCode === 65) {
+        event.preventDefault()
+        SelectAll()
+      }
     }
 
     window.addEventListener('keydown', shrtcts)
 
     return () => {
-      window.addEventListener('keydown', shrtcts)
+      window.removeEventListener('keydown', shrtcts)
     }
     // eslint-disable-next-line
   }, []);
@@ -728,6 +831,34 @@ export default function SchematicToolbar ({
           to="/editor"
         >
           <CreateNewFolderOutlinedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>}
+      {(!ltiId || !ltiNonce) && <Tooltip title="New from Template">
+        <IconButton
+          color="inherit"
+          className={classes.tools}
+          size="small"
+          onClick={() => {
+            try {
+              const graph = gridRef && gridRef.current && gridRef.current.graph
+              const count = graph
+                ? graph.getModel().getChildCount(graph.getDefaultParent())
+                : 0
+              console.log('[NewFromTemplate] canvas child count:', graph ? count : 'NO GRAPH')
+              if (count > 2) {
+                if (window.confirm('You have unsaved changes. Starting a new template will clear the canvas. Continue?')) {
+                  if (onNewFromTemplate) onNewFromTemplate()
+                }
+              } else {
+                if (onNewFromTemplate) onNewFromTemplate()
+              }
+            } catch (err) {
+              console.warn('[NewFromTemplate] graph access error, proceeding without confirm:', err)
+              if (onNewFromTemplate) onNewFromTemplate()
+            }
+          }}
+        >
+          <LayersIcon fontSize="small" />
         </IconButton>
       </Tooltip>}
       {(!ltiId || !ltiNonce) && <Tooltip title="Open (Ctrl + O)">
@@ -756,11 +887,55 @@ export default function SchematicToolbar ({
           <SaveOutlinedIcon fontSize="small" />
         </IconButton>
       </Tooltip>}
-      <SimpleSnackbar
-        open={snacOpen}
-        close={handleSnacClose}
-        message={message}
-      />
+      {(!ltiId || !ltiNonce) && <Tooltip title="Share Circuit">
+        <IconButton
+          color="inherit"
+          className={classes.tools}
+          size="small"
+          onClick={handleShareClick}
+        >
+          <ShareIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>}
+      {shareDialogOpen && (
+        <Dialog open={shareDialogOpen} onClose={handleShareClose} aria-labelledby="share-dialog-title">
+          <DialogTitle id="share-dialog-title">Share Circuit</DialogTitle>
+          <DialogContent>
+            {!currentSaveId ? (
+              <Alert severity="info">Save your circuit first before sharing.</Alert>
+            ) : (
+              <>
+                <Alert severity="warning" style={{ marginBottom: '16px' }}>
+                  This link will only work if you have saved and shared this circuit.
+                </Alert>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <TextField 
+                    readOnly 
+                    fullWidth 
+                    value={shareUrl} 
+                    variant="outlined" 
+                    size="small" 
+                  />
+                  <Button variant="contained" color="primary" onClick={handleCopyLink} style={{ whiteSpace: 'nowrap' }}>
+                    Copy Link
+                  </Button>
+                </div>
+              </>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleMakePublic} disabled={!currentSaveId} color="primary">Make Public</Button>
+            <Button onClick={handleShareClose} color="default">Close</Button>
+          </DialogActions>
+        </Dialog>
+      )}
+      {message && (
+        <SimpleSnackbar
+          open={snacOpen}
+          close={handleSnacClose}
+          message={message}
+        />
+      )}
       {ltiId && ltiUserId && ltiNonce && ltiSimHistory && (
         <div>
           <FormControl
@@ -917,7 +1092,7 @@ export default function SchematicToolbar ({
           <RotateLeft fontSize="small" />
         </IconButton>
       </Tooltip>
-      <Tooltip title="Rotate ClockWise (Alt + Right Arrow)">
+      <Tooltip title="Rotate ClockWise (Ctrl + R / Alt + Right Arrow)">
         <IconButton
           color="inherit"
           className={classes.tools}

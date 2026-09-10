@@ -31,7 +31,7 @@ export default function Dashboard () {
   })
 
   useEffect(() => {
-    const token = localStorage.getItem('esim_token')
+    const token = localStorage.getItem('esim_auth_token')
     const config = {
       headers: {
         'Content-Type': 'application/json'
@@ -43,7 +43,10 @@ export default function Dashboard () {
     api.get('lti/exists', config)
       .then(res => {
         setLtiDetails(res.data)
-      }).catch(err => console.log(err))
+      }).catch(err => {
+        console.log(err)
+        setLtiDetails(false)
+      })
   }, [])
 
   return (
@@ -51,7 +54,7 @@ export default function Dashboard () {
       <CssBaseline />
 
       {/* Schematic editor header and left side pane */}
-      <Layout resToolbar={<Header />} sidebar={<DashboardSidebar />} />
+      <Layout resToolbar={<Header />} sidebar={<DashboardSidebar />} isDashboard={true} />
 
       <LayoutMain>
         <div className={classes.toolbar} />
